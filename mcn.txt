@@ -1,0 +1,239 @@
+#include <iostream>
+using namespace std;
+
+// XOR two binary strings
+string xorOp(string a, string b) {
+    string res = "";
+    for (int i = 1; i < b.size(); i++)
+        res += (a[i] == b[i]) ? '0' : '1';
+    return res;
+}
+
+// Perform CRC division
+string crcDiv(string data, string divisor) {
+    int len = divisor.size();
+    string temp = data.substr(0, len);
+    while (len < data.size()) {
+        temp = (temp[0] == '1') ? xorOp(temp, divisor) + data[len] : temp.substr(1) + data[len];
+        len++;
+    }
+    return (temp[0] == '1') ? xorOp(temp, divisor) : temp.substr(1);
+}
+
+// Encode message with CRC
+string encode(string msg, string divisor, string &crc) {
+    string data = msg + string(divisor.size() - 1, '0');
+    crc = crcDiv(data, divisor);
+    return msg + crc;
+}
+
+// Check if error occurred
+bool hasError(string recv, string divisor, string &rem) {
+    rem = crcDiv(recv, divisor);
+    return rem.find('1') != string::npos;
+}
+
+// Check binary input
+bool isBinary(const string &s) {
+    return s.find_first_not_of("01") == string::npos;
+}
+
+int main() {
+    string msg, divisor, crc, rem;
+    cout << "--Sender--\nEnter message: ";
+    cin >> msg;
+    cout << "Enter divisor: ";
+    cin >> divisor;
+
+    if (!isBinary(msg) || !isBinary(divisor) || divisor.size() < 2) {
+        cout << "Invalid input.\n";
+        return 1;
+    }
+
+    string sent = encode(msg, divisor, crc);
+    cout << "CRC: " << crc << "\nSent: " << sent << endl;
+
+    cout << "\n--Receiver--\nMessage changed? (y/n): ";
+    char ch;
+    cin >> ch;
+    if (ch == 'y') {
+        int bit;
+        cout << "Which bit? (1-based): ";
+        cin >> bit;
+        if (bit >= 1 && bit <= sent.size())
+            sent[bit - 1] ^= 1; // flip bit
+    }
+
+    cout << "Received: " << sent << endl;
+    if (hasError(sent, divisor, rem))
+        cout << "Error detected. Remainder: " << rem << endl;
+    else
+        cout << "No error. Remainder: " << rem << endl;
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+//client
+#include <iostream>
+#include <string>
+#include <cstring>      // for memset
+#include <unistd.h>     // for close()
+#include <arpa/inet.h>  // for inet_addr(), htons(), sockaddr_in
+#include <sys/socket.h> // for socket(), connect()
+
+using namespace std;
+
+void client_program() {
+    // Create socket
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket == -1) {
+        cout << "Client socket creation failed" << endl;
+        return;
+    }
+
+    // Define server address
+    sockaddr_in server_address;
+    memset(&server_address, 0, sizeof(server_address));
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(5000);
+    server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    // Connect to the server
+    if (connect(client_socket, (sockaddr*)&server_address, sizeof(server_address)) < 0) {
+        cout << "Connection failed" << endl;
+        close(client_socket);
+        return;
+    }
+
+    cout << "Connected to server" << endl;
+
+    char message[1024];
+    while (true) {
+        // Get message from user
+        cout << "Enter message: ";
+        string input;
+        getline(cin, input);
+        send(client_socket, input.c_str(), input.length(), 0);
+
+        if (input == "Over") {
+            break;
+        }
+
+        // Receive response from the server
+        int bytes_received = recv(client_socket, message, sizeof(message) - 1, 0);
+        if (bytes_received < 0) {
+            cout << "Receive failed" << endl;
+            break;
+        }
+
+        message[bytes_received] = '\0';  // Null-terminate the received string
+        cout << "Server received: " << message << endl;
+    }
+
+    // Clean up
+    close(client_socket);
+}
+
+int main() {
+    client_program();
+    return 0;
+}
+
+
+//server
+
+#include <iostream>
+#include <string>
+#include <cstring>      // For memset
+#include <unistd.h>     // For close()
+#include <arpa/inet.h>  // For htons(), inet_ntoa(), etc.
+#include <sys/socket.h> // For socket functions
+#include <netinet/in.h> // For sockaddr_in
+
+using namespace std;
+
+void server_program() {
+    // Create socket
+    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
+        cout << "Server socket creation failed" << endl;
+        return;
+    }
+
+    // Define server address
+    sockaddr_in server_address;
+    memset(&server_address, 0, sizeof(server_address));
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(5000);
+
+    // Bind socket to the address
+    if (bind(server_socket, (sockaddr*)&server_address, sizeof(server_address)) < 0) {
+        cout << "Bind failed" << endl;
+        close(server_socket);
+        return;
+    }
+
+    // Listen for incoming connections
+    if (listen(server_socket, 1) < 0) {
+        cout << "Listen failed" << endl;
+        close(server_socket);
+        return;
+    }
+
+    cout << "Server waiting for client..." << endl;
+
+    // Accept incoming client connection
+    sockaddr_in client_address;
+    socklen_t client_address_len = sizeof(client_address);
+    int client_socket = accept(server_socket, (sockaddr*)&client_address, &client_address_len);
+    if (client_socket < 0) {
+        cout << "Client connection failed" << endl;
+        close(server_socket);
+        return;
+    }
+
+    cout << "Client connected" << endl;
+
+    char message[1024];
+    while (true) {
+        // Receive message from the client
+        int bytes_received = recv(client_socket, message, sizeof(message) - 1, 0);
+        if (bytes_received < 0) {
+            cout << "Receive failed" << endl;
+            break;
+        }
+        message[bytes_received] = '\0';  // Null-terminate the received string
+        cout << "Client sent: " << message << endl;
+
+        if (string(message) == "Over") {
+            break;
+        }
+
+        // Send response to the client
+        cout << "Enter response: ";
+        string response;
+        getline(cin, response);
+        send(client_socket, response.c_str(), response.length(), 0);
+    }
+
+    // Clean up
+    close(client_socket);
+    close(server_socket);
+}
+
+int main() {
+    server_program();
+    return 0;
+}
+
