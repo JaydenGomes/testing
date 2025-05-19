@@ -1,0 +1,89 @@
+def xor_operation(a, b):
+    result = ""
+    for i in range(len(a)):
+        result += '0' if a[i] == b[i] else '1'
+    return result
+
+def xor_division(dividend, divisor):
+    pick = len(divisor)
+    temp = dividend[:pick]
+    
+    while pick < len(dividend):
+        if temp[0] == '1':
+            temp = xor_operation(temp, divisor)[1:] + dividend[pick]
+        else:
+            temp = temp[1:] + dividend[pick]
+        pick += 1
+    
+    if temp[0] == '1':
+        temp = xor_operation(temp, divisor)[1:]
+    else:
+        temp = temp[1:]
+    
+    while len(temp) < len(divisor) - 1:
+        temp = "0" + temp
+    
+    return temp
+
+def encode_message(message, divisor):
+    crc_length = len(divisor) - 1
+    appended_message = message + "0" * crc_length
+    crc = xor_division(appended_message, divisor)
+    return message + crc, crc
+
+def check_error(received, divisor):
+    received_crc = xor_division(received, divisor)
+    return received_crc != "0" * (len(divisor) - 1), received_crc
+
+def is_binary(string):
+    for char in string:
+        if char not in "01":
+            return False
+    return True
+
+def main():
+    print("--Sender--")
+    message = input("Enter message: ")
+    divisor = input("Enter divisor: ")
+    
+    if not is_binary(message) or not is_binary(divisor):
+        print("Error: Message and divisor must be binary strings (contain only 0s and 1s).")
+        return
+    
+    if len(divisor) < 2:
+        print("Error: Divisor must be at least 2 bits long.")
+        return
+    
+    transmitted_message, crc = encode_message(message, divisor)
+    dividend_after_adjustment = message + "0" * (len(divisor) - 1)
+    
+    print("Dividend after adjustment:", dividend_after_adjustment)
+    print("CRC:", crc)
+    print("Final message transmitted:", transmitted_message)
+    
+    print("\n--Receiver--")
+    changed = input("Has the message changed? (y/n): ")
+    received_message = transmitted_message
+    
+    if changed.lower() == 'y':
+        error_bit = int(input("Which bit has an error? (1-indexed): ")) - 1
+        if error_bit < 0 or error_bit >= len(received_message):
+            print("Error: Invalid bit position.")
+            return
+        received_message = received_message[:error_bit] + ('1' if received_message[error_bit] == '0' else '0') + received_message[error_bit + 1:]
+    
+    print("Message received:", received_message)
+    error_detected, received_crc = check_error(received_message, divisor)
+    
+    print("CRC:", received_crc)
+    print("Error detected." if error_detected else "No error.")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
